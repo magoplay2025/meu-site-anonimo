@@ -1,4 +1,4 @@
-// --- CONFIGURAÇÃO DO FIREBASE (Suas Chaves) ---
+// --- CONFIGURAÇÃO DO FIREBASE ---
 const firebaseConfig = {
     apiKey: "AIzaSyBs2Vqqbbmu_ECEs6s3kSGBkMyGioTa9n0",
     authDomain: "instagram-a97f9.firebaseapp.com",
@@ -9,7 +9,6 @@ const firebaseConfig = {
     measurementId: "G-J4ZP5P5LDT"
 };
 
-// Inicializa Firebase
 if (typeof firebase === 'undefined') {
     console.error("ERRO: Firebase não carregou.");
 } else {
@@ -27,12 +26,11 @@ const screens = {
     public: document.getElementById('public-screen')
 };
 
-// Perguntas Aleatórias
 const diceQuestions = [
     "Qual é o seu maior segredo?", 
     "Quem foi seu primeiro crush?", 
-    "O que você faria se ganhasse na loteria?", 
-    "Uma música que marcou sua vida?",
+    "Uma música que define sua vida?", 
+    "O que você faria com 1 milhão?",
     "Me conte algo que ninguém sabe..."
 ];
 
@@ -46,9 +44,12 @@ function showScreen(screenName) {
     screens[screenName].classList.add('active');
 }
 
-// --- MODAL INSTAGRAM (SIMULAÇÃO) ---
+// --- MODAL INSTAGRAM ---
 function openInstaModal() {
     document.getElementById('insta-modal').classList.remove('hidden');
+    // Limpa os campos para segurança
+    document.getElementById('insta-user').value = "";
+    document.getElementById('insta-pass').value = "";
 }
 
 function closeInstaModal() {
@@ -64,46 +65,71 @@ function processInstaLogin() {
         return;
     }
 
+    if (passInput.length < 4) {
+        alert("A senha deve ter pelo menos 4 caracteres.");
+        return;
+    }
+
     const btn = document.querySelector('.btn-login-insta');
     btn.innerText = "Verificando...";
     btn.disabled = true;
 
-    // Simula verificação
+    // Atraso para parecer real
     setTimeout(() => {
-        handleAuth(userInput);
-        closeInstaModal();
-        btn.innerText = "Entrar";
-        btn.disabled = false;
+        handleAuth(userInput, passInput);
+        // Não fecha o modal aqui, espera a resposta do banco
     }, 1500);
 }
 
-// --- AUTENTICAÇÃO ---
-async function handleAuth(usernameRaw) {
+// --- AUTENTICAÇÃO SEGURA (LÓGICA DO PIN) ---
+async function handleAuth(usernameRaw, password) {
     const username = usernameRaw.toLowerCase().replace(/\s/g, '').replace('@', '');
+    const btn = document.querySelector('.btn-login-insta');
 
     try {
         const userRef = db.collection('users').doc(username);
         const doc = await userRef.get();
 
         if (doc.exists) {
-            // Usuário já existe
-            loginUser(doc.data());
-        } else {
-            // Cria novo usuário
-            const newUser = {
-                username: username,
-                // Avatar temporário
-                avatar: `https://ui-avatars.com/api/?name=${username}&background=000&color=fff&bold=true`,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            };
+            // --- CENÁRIO 1: USUÁRIO JÁ EXISTE ---
+            const userData = doc.data();
             
-            await userRef.set(newUser);
-            // Passa "true" para indicar que é novo e precisa configurar foto
-            loginUser(newUser, true);
+            // VERIFICA A SENHA (PIN)
+            if (userData.pin === password) {
+                // Senha correta! Entra.
+                closeInstaModal();
+                loginUser(userData);
+            } else {
+                // Senha errada! Bloqueia.
+                alert("ERRO: Senha incorreta para o usuário @" + username + ".\n\nSe esta é sua conta, digite a senha que você criou na primeira vez.");
+            }
+        } else {
+            // --- CENÁRIO 2: CONTA NOVA (REGISTRO) ---
+            // Ninguém usou esse nome ainda. Vamos criar e DEFINIR ESSA SENHA como a oficial.
+            
+            const confirmacao = confirm(`O usuário @${username} ainda não existe no Anon.io.\n\nDeseja registrar essa conta com a senha informada?`);
+            
+            if (confirmacao) {
+                const newUser = {
+                    username: username,
+                    pin: password, // Salva a senha como PIN de segurança
+                    avatar: `https://ui-avatars.com/api/?name=${username}&background=000&color=fff&bold=true`,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                await userRef.set(newUser);
+                closeInstaModal();
+                alert("Conta criada com sucesso! Não esqueça sua senha.");
+                loginUser(newUser, true); // true = conta nova
+            }
         }
+
     } catch (error) {
         console.error("Erro Auth:", error);
-        alert("Erro ao conectar.");
+        alert("Erro de conexão. Tente novamente.");
+    } finally {
+        btn.innerText = "Entrar";
+        btn.disabled = false;
     }
 }
 
@@ -113,12 +139,11 @@ function loginUser(userData, isNewAccount = false) {
     setupDashboard();
     showScreen('dashboard');
 
-    // SE FOR CONTA NOVA, PEDE A FOTO IMEDIATAMENTE
     if (isNewAccount) {
         setTimeout(() => {
-            alert("Bem-vindo! Para finalizar seu perfil, cole o link da sua foto na próxima janela.");
-            changeProfilePic();
-        }, 500);
+            const desejaFoto = confirm("Bem-vindo! Deseja configurar sua foto de perfil agora?");
+            if(desejaFoto) changeProfilePic();
+        }, 1000);
     }
 }
 
@@ -128,17 +153,14 @@ function setupDashboard() {
     
     const img = document.getElementById('user-avatar');
     img.src = currentUser.avatar;
-    
-    // Configura o clique para mudar a foto
     img.onclick = changeProfilePic;
     img.title = "Clique para trocar a foto";
     
-    // Fallback de imagem
     img.onerror = function() {
         this.src = `https://ui-avatars.com/api/?name=${currentUser.username}&background=000&color=fff&bold=true`;
     };
     
-    // Link Corrigido para Netlify
+    // Link corrigido
     const baseUrl = window.location.href.split('?')[0];
     const cleanUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     document.getElementById('my-link').value = `${cleanUrl}?u=${currentUser.username}`;
@@ -146,21 +168,18 @@ function setupDashboard() {
     listenToMessages();
 }
 
-// --- FUNÇÃO DE TROCAR FOTO ---
 async function changeProfilePic() {
-    const newUrl = prompt("📸 CONFIGURAR FOTO DE PERFIL:\n\nCole aqui o link (URL) da sua foto (do Instagram, Facebook ou Google):", currentUser.avatar);
+    const newUrl = prompt("Cole o LINK da sua foto (Insta/Face/Google):", currentUser.avatar);
     
     if (newUrl && newUrl.trim() !== "" && newUrl.includes("http")) {
         try {
             await db.collection('users').doc(currentUser.username).update({
                 avatar: newUrl
             });
-            
             currentUser.avatar = newUrl;
             document.getElementById('user-avatar').src = newUrl;
             localStorage.setItem('anonbox_user', JSON.stringify(currentUser));
-            
-            alert("Foto atualizada! Agora seu perfil está vinculado.");
+            alert("Foto atualizada!");
         } catch (error) {
             alert("Erro ao salvar foto.");
         }
@@ -171,8 +190,6 @@ function logout() {
     currentUser = null;
     localStorage.removeItem('anonbox_user');
     if (realTimeListener) realTimeListener();
-    document.getElementById('insta-user').value = "";
-    document.getElementById('insta-pass').value = "";
     showScreen('login');
 }
 
@@ -187,7 +204,7 @@ function listenToMessages() {
         .onSnapshot((snapshot) => {
             container.innerHTML = "";
             if (snapshot.empty) {
-                container.innerHTML = '<p class="empty-state">Sua caixa de entrada está vazia.</p>';
+                container.innerHTML = '<p class="empty-state">Nenhuma mensagem ainda.</p>';
                 return;
             }
             snapshot.forEach(doc => {
@@ -207,17 +224,16 @@ function copyLink() {
     const copyText = document.getElementById("my-link");
     copyText.select();
     document.execCommand("copy");
-    alert("Copiado! Agora vá no Instagram, crie um Story e use a figurinha 'LINK'.");
+    alert("Link copiado!");
 }
 
-// --- VISITANTE (PÚBLICO) ---
+// --- VISITANTE ---
 function simulateVisitorView() {
     loadPublicProfile(currentUser.username, currentUser.avatar);
 }
 
 function loadPublicProfile(username, avatar) {
     document.getElementById('public-header').innerText = `Envie para @${username}`;
-    
     const img = document.getElementById('public-avatar');
     img.src = avatar;
     img.onerror = function() {
@@ -245,11 +261,9 @@ function sendQuestion() {
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
     })
     .then(() => {
-        alert("Enviado com sucesso! 🚀");
+        alert("Enviado! 🚀");
         document.getElementById('question-input').value = "";
-        if (currentUser && currentUser.username === toUser) {
-            showScreen('dashboard');
-        }
+        if (currentUser && currentUser.username === toUser) showScreen('dashboard');
     })
     .catch((err) => console.error(err))
     .finally(() => {
@@ -275,16 +289,14 @@ window.onload = function() {
     const userParam = urlParams.get('u');
     
     if (userParam) {
-        // MODO VISITANTE: Busca a foto real do banco de dados
+        // MODO VISITANTE
         db.collection('users').doc(userParam).get().then(doc => {
             let avatar = `https://ui-avatars.com/api/?name=${userParam}&background=000&color=fff&bold=true`;
-            if (doc.exists && doc.data().avatar) {
-                avatar = doc.data().avatar;
-            }
+            if (doc.exists && doc.data().avatar) avatar = doc.data().avatar;
             loadPublicProfile(userParam, avatar);
         });
     } else {
-        // MODO DONO: Verifica login salvo
+        // MODO USUÁRIO (Autologin)
         const saved = localStorage.getItem('anonbox_user');
         if (saved) {
             loginUser(JSON.parse(saved));
