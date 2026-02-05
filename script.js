@@ -1,4 +1,4 @@
-// --- CONFIGURAÇÃO DO FIREBASE ---
+// --- CONFIGURAÇÃO FIREBASE ---
 const firebaseConfig = {
     apiKey: "AIzaSyBs2Vqqbbmu_ECEs6s3kSGBkMyGioTa9n0",
     authDomain: "instagram-a97f9.firebaseapp.com",
@@ -9,11 +9,7 @@ const firebaseConfig = {
     measurementId: "G-J4ZP5P5LDT"
 };
 
-if (typeof firebase === 'undefined') {
-    console.error("ERRO: Firebase não carregou.");
-} else {
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-}
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 // --- VARIÁVEIS ---
@@ -26,141 +22,77 @@ const screens = {
     public: document.getElementById('public-screen')
 };
 
-const diceQuestions = [
-    "Qual é o seu maior segredo?", 
-    "Quem foi seu primeiro crush?", 
-    "Uma música que define sua vida?", 
-    "O que você faria com 1 milhão?",
-    "Me conte algo que ninguém sabe..."
-];
+const diceQuestions = ["Qual é o seu maior segredo?", "Quem foi seu primeiro crush?", "Uma música que define sua vida?", "O que você faria com 1 milhão?"];
 
 // --- NAVEGAÇÃO ---
 function showScreen(screenName) {
-    Object.values(screens).forEach(s => {
-        s.classList.remove('active');
-        s.classList.add('hidden');
-    });
+    Object.values(screens).forEach(s => { s.classList.remove('active'); s.classList.add('hidden'); });
     screens[screenName].classList.remove('hidden');
     screens[screenName].classList.add('active');
 }
 
-// --- MODAL INSTAGRAM ---
-function openInstaModal() {
-    document.getElementById('insta-modal').classList.remove('hidden');
-    // Limpa os campos para segurança
-    document.getElementById('insta-user').value = "";
-    document.getElementById('insta-pass').value = "";
-}
+// --- LOGIN / CADASTRO SIMPLIFICADO ---
+async function handleLogin() {
+    const userInp = document.getElementById('inp-user').value.toLowerCase().replace(/\s/g, '').replace('@', '');
+    const passInp = document.getElementById('inp-pass').value;
 
-function closeInstaModal() {
-    document.getElementById('insta-modal').classList.add('hidden');
-}
+    if (!userInp || !passInp) return alert("Preencha usuário e senha.");
+    if (passInp.length < 3) return alert("Senha muito curta.");
 
-function processInstaLogin() {
-    const userInput = document.getElementById('insta-user').value;
-    const passInput = document.getElementById('insta-pass').value;
-
-    if (!userInput || !passInput) {
-        alert("Preencha usuário e senha.");
-        return;
-    }
-
-    if (passInput.length < 4) {
-        alert("A senha deve ter pelo menos 4 caracteres.");
-        return;
-    }
-
-    const btn = document.querySelector('.btn-login-insta');
-    btn.innerText = "Verificando...";
+    const btn = document.querySelector('.btn-black');
+    btn.innerText = "Carregando...";
     btn.disabled = true;
 
-    // Atraso para parecer real
-    setTimeout(() => {
-        handleAuth(userInput, passInput);
-        // Não fecha o modal aqui, espera a resposta do banco
-    }, 1500);
-}
-
-// --- AUTENTICAÇÃO SEGURA (LÓGICA DO PIN) ---
-async function handleAuth(usernameRaw, password) {
-    const username = usernameRaw.toLowerCase().replace(/\s/g, '').replace('@', '');
-    const btn = document.querySelector('.btn-login-insta');
-
     try {
-        const userRef = db.collection('users').doc(username);
+        const userRef = db.collection('users').doc(userInp);
         const doc = await userRef.get();
 
         if (doc.exists) {
-            // --- CENÁRIO 1: USUÁRIO JÁ EXISTE ---
-            const userData = doc.data();
-            
-            // VERIFICA A SENHA (PIN)
-            if (userData.pin === password) {
-                // Senha correta! Entra.
-                closeInstaModal();
-                loginUser(userData);
+            // LOGIN: Verifica a senha
+            const data = doc.data();
+            if (data.pin === passInp) {
+                loginUser(data);
             } else {
-                // Senha errada! Bloqueia.
-                alert("ERRO: Senha incorreta para o usuário @" + username + ".\n\nSe esta é sua conta, digite a senha que você criou na primeira vez.");
+                alert("Senha incorreta!");
             }
         } else {
-            // --- CENÁRIO 2: CONTA NOVA (REGISTRO) ---
-            // Ninguém usou esse nome ainda. Vamos criar e DEFINIR ESSA SENHA como a oficial.
-            
-            const confirmacao = confirm(`O usuário @${username} ainda não existe no Anon.io.\n\nDeseja registrar essa conta com a senha informada?`);
-            
-            if (confirmacao) {
+            // CADASTRO: Cria novo
+            const confirmCreate = confirm(`O usuário @${userInp} não existe.\nDeseja criar agora com essa senha?`);
+            if (confirmCreate) {
                 const newUser = {
-                    username: username,
-                    pin: password, // Salva a senha como PIN de segurança
-                    avatar: `https://ui-avatars.com/api/?name=${username}&background=000&color=fff&bold=true`,
+                    username: userInp,
+                    pin: passInp,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 };
-                
                 await userRef.set(newUser);
-                closeInstaModal();
-                alert("Conta criada com sucesso! Não esqueça sua senha.");
-                loginUser(newUser, true); // true = conta nova
+                loginUser(newUser);
             }
         }
-
-    } catch (error) {
-        console.error("Erro Auth:", error);
-        alert("Erro de conexão. Tente novamente.");
+    } catch (e) {
+        console.error(e);
+        alert("Erro de conexão.");
     } finally {
-        btn.innerText = "Entrar";
+        btn.innerText = "ENTRAR / CRIAR";
         btn.disabled = false;
     }
 }
 
-function loginUser(userData, isNewAccount = false) {
+function loginUser(userData) {
     currentUser = userData;
     localStorage.setItem('anonbox_user', JSON.stringify(userData));
     setupDashboard();
     showScreen('dashboard');
-
-    if (isNewAccount) {
-        setTimeout(() => {
-            const desejaFoto = confirm("Bem-vindo! Deseja configurar sua foto de perfil agora?");
-            if(desejaFoto) changeProfilePic();
-        }, 1000);
-    }
 }
 
 // --- DASHBOARD ---
 function setupDashboard() {
     document.getElementById('user-name').innerText = "@" + currentUser.username;
     
-    const img = document.getElementById('user-avatar');
-    img.src = currentUser.avatar;
-    img.onclick = changeProfilePic;
-    img.title = "Clique para trocar a foto";
+    // GERA AVATAR AUTOMÁTICO (LETRA)
+    const avatarUrl = `https://ui-avatars.com/api/?name=${currentUser.username}&background=random&color=fff&bold=true&size=200`;
+    document.getElementById('user-avatar').src = avatarUrl;
     
-    img.onerror = function() {
-        this.src = `https://ui-avatars.com/api/?name=${currentUser.username}&background=000&color=fff&bold=true`;
-    };
-    
-    // Link corrigido
+    // Configura Link
     const baseUrl = window.location.href.split('?')[0];
     const cleanUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     document.getElementById('my-link').value = `${cleanUrl}?u=${currentUser.username}`;
@@ -168,28 +100,11 @@ function setupDashboard() {
     listenToMessages();
 }
 
-async function changeProfilePic() {
-    const newUrl = prompt("Cole o LINK da sua foto (Insta/Face/Google):", currentUser.avatar);
-    
-    if (newUrl && newUrl.trim() !== "" && newUrl.includes("http")) {
-        try {
-            await db.collection('users').doc(currentUser.username).update({
-                avatar: newUrl
-            });
-            currentUser.avatar = newUrl;
-            document.getElementById('user-avatar').src = newUrl;
-            localStorage.setItem('anonbox_user', JSON.stringify(currentUser));
-            alert("Foto atualizada!");
-        } catch (error) {
-            alert("Erro ao salvar foto.");
-        }
-    }
-}
-
 function logout() {
     currentUser = null;
     localStorage.removeItem('anonbox_user');
     if (realTimeListener) realTimeListener();
+    document.getElementById('inp-pass').value = ""; // Limpa senha
     showScreen('login');
 }
 
@@ -204,42 +119,35 @@ function listenToMessages() {
         .onSnapshot((snapshot) => {
             container.innerHTML = "";
             if (snapshot.empty) {
-                container.innerHTML = '<p class="empty-state">Nenhuma mensagem ainda.</p>';
+                container.innerHTML = '<p class="empty-state">Sem mensagens.</p>';
                 return;
             }
             snapshot.forEach(doc => {
-                createMessageCard(doc.data().text, container);
+                const div = document.createElement('div');
+                div.className = 'message-card';
+                div.innerText = doc.data().text;
+                container.appendChild(div);
             });
         });
-}
-
-function createMessageCard(text, container) {
-    const card = document.createElement('div');
-    card.className = 'message-card';
-    card.innerText = text;
-    container.appendChild(card);
 }
 
 function copyLink() {
     const copyText = document.getElementById("my-link");
     copyText.select();
     document.execCommand("copy");
-    alert("Link copiado!");
+    alert("Copiado!");
 }
 
 // --- VISITANTE ---
 function simulateVisitorView() {
-    loadPublicProfile(currentUser.username, currentUser.avatar);
+    const username = currentUser.username;
+    const avatarUrl = `https://ui-avatars.com/api/?name=${username}&background=random&color=fff&bold=true&size=200`;
+    loadPublicProfile(username, avatarUrl);
 }
 
 function loadPublicProfile(username, avatar) {
     document.getElementById('public-header').innerText = `Envie para @${username}`;
-    const img = document.getElementById('public-avatar');
-    img.src = avatar;
-    img.onerror = function() {
-        this.src = `https://ui-avatars.com/api/?name=${username}&background=000&color=fff&bold=true`;
-    };
-
+    document.getElementById('public-avatar').src = avatar;
     document.getElementById('public-screen').dataset.toUser = username;
     document.getElementById('question-input').value = "";
     showScreen('public');
@@ -252,8 +160,7 @@ function sendQuestion() {
     if (!text.trim()) return alert("Escreva algo!");
 
     const btn = document.querySelector('.btn-send');
-    btn.disabled = true;
-    btn.innerText = "Enviando...";
+    btn.disabled = true; btn.innerText = "...";
 
     db.collection("messages").add({
         to: toUser,
@@ -261,15 +168,11 @@ function sendQuestion() {
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
     })
     .then(() => {
-        alert("Enviado! 🚀");
+        alert("Enviado!");
         document.getElementById('question-input').value = "";
         if (currentUser && currentUser.username === toUser) showScreen('dashboard');
     })
-    .catch((err) => console.error(err))
-    .finally(() => {
-        btn.disabled = false;
-        btn.innerText = "Enviar Anônimo 🚀";
-    });
+    .finally(() => { btn.disabled = false; btn.innerText = "Enviar 🚀"; });
 }
 
 function rollDice() {
@@ -283,25 +186,17 @@ function goToHome() {
     showScreen('login');
 }
 
-// --- INICIALIZAÇÃO ---
+// --- START ---
 window.onload = function() {
     const urlParams = new URLSearchParams(window.location.search);
     const userParam = urlParams.get('u');
     
     if (userParam) {
-        // MODO VISITANTE
-        db.collection('users').doc(userParam).get().then(doc => {
-            let avatar = `https://ui-avatars.com/api/?name=${userParam}&background=000&color=fff&bold=true`;
-            if (doc.exists && doc.data().avatar) avatar = doc.data().avatar;
-            loadPublicProfile(userParam, avatar);
-        });
+        const avatarUrl = `https://ui-avatars.com/api/?name=${userParam}&background=random&color=fff&bold=true&size=200`;
+        loadPublicProfile(userParam, avatarUrl);
     } else {
-        // MODO USUÁRIO (Autologin)
         const saved = localStorage.getItem('anonbox_user');
-        if (saved) {
-            loginUser(JSON.parse(saved));
-        } else {
-            showScreen('login');
-        }
+        if (saved) loginUser(JSON.parse(saved));
+        else showScreen('login');
     }
 };
