@@ -31,7 +31,7 @@ function showScreen(screenName) {
     screens[screenName].classList.add('active');
 }
 
-// --- LOGIN / CADASTRO SIMPLIFICADO ---
+// --- LOGIN / CADASTRO ---
 async function handleLogin() {
     const userInp = document.getElementById('inp-user').value.toLowerCase().replace(/\s/g, '').replace('@', '');
     const passInp = document.getElementById('inp-pass').value;
@@ -48,7 +48,6 @@ async function handleLogin() {
         const doc = await userRef.get();
 
         if (doc.exists) {
-            // LOGIN: Verifica a senha
             const data = doc.data();
             if (data.pin === passInp) {
                 loginUser(data);
@@ -56,7 +55,6 @@ async function handleLogin() {
                 alert("Senha incorreta!");
             }
         } else {
-            // CADASTRO: Cria novo
             const confirmCreate = confirm(`O usuário @${userInp} não existe.\nDeseja criar agora com essa senha?`);
             if (confirmCreate) {
                 const newUser = {
@@ -88,11 +86,10 @@ function loginUser(userData) {
 function setupDashboard() {
     document.getElementById('user-name').innerText = "@" + currentUser.username;
     
-    // GERA AVATAR AUTOMÁTICO (LETRA)
+    // Avatar simples (letra)
     const avatarUrl = `https://ui-avatars.com/api/?name=${currentUser.username}&background=random&color=fff&bold=true&size=200`;
     document.getElementById('user-avatar').src = avatarUrl;
     
-    // Configura Link
     const baseUrl = window.location.href.split('?')[0];
     const cleanUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     document.getElementById('my-link').value = `${cleanUrl}?u=${currentUser.username}`;
@@ -104,11 +101,11 @@ function logout() {
     currentUser = null;
     localStorage.removeItem('anonbox_user');
     if (realTimeListener) realTimeListener();
-    document.getElementById('inp-pass').value = ""; // Limpa senha
+    document.getElementById('inp-pass').value = ""; 
     showScreen('login');
 }
 
-// --- MENSAGENS ---
+// --- MENSAGENS COM BOTÃO DE RESPONDER ---
 function listenToMessages() {
     const container = document.getElementById('messages-list');
     if (realTimeListener) realTimeListener();
@@ -123,12 +120,58 @@ function listenToMessages() {
                 return;
             }
             snapshot.forEach(doc => {
-                const div = document.createElement('div');
-                div.className = 'message-card';
-                div.innerText = doc.data().text;
-                container.appendChild(div);
+                createMessageCard(doc.data().text, container);
             });
         });
+}
+
+function createMessageCard(text, container) {
+    const card = document.createElement('div');
+    card.className = 'message-card';
+    
+    // Texto da pergunta
+    const textElem = document.createElement('div');
+    textElem.className = 'msg-text';
+    textElem.innerText = text;
+    
+    // Botão de Responder (Gera Imagem)
+    const btn = document.createElement('button');
+    btn.className = 'btn-reply';
+    btn.innerHTML = '<span class="material-icons">photo_camera</span> Responder no Story';
+    btn.onclick = () => generateStoryImage(text); // Chama a função mágica
+
+    card.appendChild(textElem);
+    card.appendChild(btn);
+    container.appendChild(card);
+}
+
+// --- FUNÇÃO MÁGICA: GERAR IMAGEM PARA STORY ---
+function generateStoryImage(text) {
+    // 1. Preenche o template escondido com o texto
+    const storyText = document.getElementById('story-text');
+    storyText.innerText = text;
+
+    // 2. Tira print da div escondida usando html2canvas
+    const element = document.getElementById('story-capture');
+    
+    // Avisa que está processando
+    const originalText = "Aguarde...";
+    
+    html2canvas(element, {
+        scale: 2, // Alta qualidade
+        useCORS: true
+    }).then(canvas => {
+        // 3. Cria o link de download
+        const link = document.createElement('a');
+        link.download = `story_${currentUser.username}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+        
+        alert("Imagem salva! 📸\n\nAgora abra o Instagram, crie um Story e suba essa imagem.");
+    }).catch(err => {
+        console.error(err);
+        alert("Erro ao gerar imagem.");
+    });
 }
 
 function copyLink() {

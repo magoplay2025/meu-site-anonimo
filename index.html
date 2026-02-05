@@ -9,6 +9,8 @@
     
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -58,6 +60,7 @@
                 <button onclick="simulateVisitorView()" class="btn-secondary">👀 Ver como visitante</button>
             </div>
 
+            <h3 class="section-title">PERGUNTAS RECEBIDAS</h3>
             <div id="messages-list" class="messages-container">
                 <p class="empty-state">Carregando...</p>
             </div>
@@ -81,6 +84,16 @@
             </div>
         </section>
 
+    </div>
+
+    <div id="story-capture" class="story-template">
+        <div class="story-content">
+            <div class="story-header">Anon.io</div>
+            <div class="story-card">
+                <p id="story-text">Aqui vai a pergunta...</p>
+            </div>
+            <div class="story-footer">Mande a sua! Link na Bio 👆</div>
+        </div>
     </div>
 
     <script src="script.js"></script>
