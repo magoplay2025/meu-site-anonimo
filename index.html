@@ -21,7 +21,7 @@
         <section id="login-screen" class="screen active">
             <div class="logo-area">
                 <h1>Anon.io</h1>
-                <p>Login seguro e anônimo</p>
+                <p>Perguntas anônimas & Respostas no Story</p>
             </div>
 
             <div class="login-box">
@@ -32,10 +32,10 @@
                 
                 <div class="input-group">
                     <span class="icon">🔒</span>
-                    <input type="password" id="inp-pass" placeholder="Sua senha (PIN)">
+                    <input type="password" id="inp-pass" placeholder="Crie uma Senha (PIN)">
                 </div>
 
-                <button onclick="handleLogin()" class="btn-black">ENTRAR / CRIAR</button>
+                <button onclick="handleLogin()" class="btn-black">ENTRAR / CRIAR CONTA</button>
             </div>
         </section>
 
@@ -47,8 +47,9 @@
             </header>
 
             <div class="user-profile-dash">
-                <img id="user-avatar" src="" alt="Avatar">
+                <img id="user-avatar" src="" alt="Avatar" title="Clique para trocar a foto">
                 <span id="user-name">@usuario</span>
+                <p class="edit-hint">(Clique na foto para alterar)</p>
             </div>
 
             <div class="share-card">

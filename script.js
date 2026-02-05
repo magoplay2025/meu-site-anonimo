@@ -9,11 +9,10 @@ const firebaseConfig = {
     measurementId: "G-J4ZP5P5LDT"
 };
 
-// Inicializa Firebase
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// --- VARIÁVEIS GLOBAIS ---
+// --- VARIÁVEIS ---
 let currentUser = null;
 let realTimeListener = null;
 
@@ -23,36 +22,24 @@ const screens = {
     public: document.getElementById('public-screen')
 };
 
-// Perguntas do dado
-const diceQuestions = [
-    "Qual é o seu maior segredo?", 
-    "Quem foi seu primeiro crush?", 
-    "Uma música que define sua vida?", 
-    "O que você faria com 1 milhão?",
-    "Uma viagem dos sonhos?",
-    "Me conte algo que ninguém sabe..."
-];
+const diceQuestions = ["Qual é o seu maior segredo?", "Quem foi seu primeiro crush?", "Uma música que define sua vida?", "O que você faria com 1 milhão?"];
 
-// --- NAVEGAÇÃO ENTRE TELAS ---
+// --- NAVEGAÇÃO ---
 function showScreen(screenName) {
-    Object.values(screens).forEach(s => { 
-        s.classList.remove('active'); 
-        s.classList.add('hidden'); 
-    });
+    Object.values(screens).forEach(s => { s.classList.remove('active'); s.classList.add('hidden'); });
     screens[screenName].classList.remove('hidden');
     screens[screenName].classList.add('active');
 }
 
-// --- LOGIN / CADASTRO (COM SENHA PRÓPRIA) ---
+// --- LOGIN / CADASTRO ---
 async function handleLogin() {
     const userInp = document.getElementById('inp-user').value.toLowerCase().replace(/\s/g, '').replace('@', '');
     const passInp = document.getElementById('inp-pass').value;
 
     if (!userInp || !passInp) return alert("Preencha usuário e senha.");
-    if (passInp.length < 3) return alert("A senha deve ter pelo menos 3 caracteres.");
+    if (passInp.length < 3) return alert("Senha muito curta.");
 
     const btn = document.querySelector('.btn-black');
-    const originalText = btn.innerText;
     btn.innerText = "Carregando...";
     btn.disabled = true;
 
@@ -61,21 +48,20 @@ async function handleLogin() {
         const doc = await userRef.get();
 
         if (doc.exists) {
-            // LOGIN: Usuário existe, verifica a senha (PIN)
             const data = doc.data();
             if (data.pin === passInp) {
                 loginUser(data);
             } else {
-                alert("Senha incorreta! Se você criou essa conta, use a senha definida no cadastro.");
+                alert("Senha incorreta! Se você esqueceu, terá que criar outra conta.");
             }
         } else {
-            // CADASTRO: Usuário não existe, cria novo
-            const confirmCreate = confirm(`O usuário @${userInp} ainda não existe.\nDeseja criar uma conta agora com essa senha?`);
-            
+            const confirmCreate = confirm(`O usuário @${userInp} não existe.\nDeseja criar agora com essa senha?`);
             if (confirmCreate) {
                 const newUser = {
                     username: userInp,
-                    pin: passInp, // Essa senha será a oficial
+                    pin: passInp,
+                    // Avatar padrão (iniciais)
+                    avatar: `https://ui-avatars.com/api/?name=${userInp}&background=random&color=fff&bold=true&size=200`,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 };
                 await userRef.set(newUser);
@@ -84,47 +70,67 @@ async function handleLogin() {
         }
     } catch (e) {
         console.error(e);
-        alert("Erro de conexão com o servidor.");
+        alert("Erro de conexão.");
     } finally {
-        btn.innerText = originalText;
+        btn.innerText = "ENTRAR / CRIAR CONTA";
         btn.disabled = false;
     }
 }
 
 function loginUser(userData) {
     currentUser = userData;
-    // Salva no navegador para não pedir senha toda hora
     localStorage.setItem('anonbox_user', JSON.stringify(userData));
     setupDashboard();
     showScreen('dashboard');
 }
 
-// --- DASHBOARD (PAINEL DO USUÁRIO) ---
+// --- DASHBOARD & TROCAR FOTO ---
 function setupDashboard() {
     document.getElementById('user-name').innerText = "@" + currentUser.username;
     
-    // Configura Avatar (Letra Padrão)
-    const avatarUrl = `https://ui-avatars.com/api/?name=${currentUser.username}&background=random&color=fff&bold=true&size=200`;
-    document.getElementById('user-avatar').src = avatarUrl;
+    const img = document.getElementById('user-avatar');
+    img.src = currentUser.avatar;
     
-    // Configura o Link de Compartilhamento
+    // Função para trocar foto ao clicar
+    img.onclick = changeProfilePic;
+    
+    // Se a imagem falhar, usa padrão
+    img.onerror = function() {
+        this.src = `https://ui-avatars.com/api/?name=${currentUser.username}&background=random&color=fff&bold=true&size=200`;
+    };
+    
     const baseUrl = window.location.href.split('?')[0];
     const cleanUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     document.getElementById('my-link').value = `${cleanUrl}?u=${currentUser.username}`;
     
-    // Começa a ouvir mensagens
     listenToMessages();
+}
+
+async function changeProfilePic() {
+    const newUrl = prompt("Cole o LINK da sua foto (ex: link do Instagram, Facebook ou Google):", currentUser.avatar);
+    
+    if (newUrl && newUrl.trim() !== "" && newUrl.includes("http")) {
+        try {
+            await db.collection('users').doc(currentUser.username).update({ avatar: newUrl });
+            currentUser.avatar = newUrl;
+            document.getElementById('user-avatar').src = newUrl;
+            localStorage.setItem('anonbox_user', JSON.stringify(currentUser));
+            alert("Foto atualizada!");
+        } catch (error) {
+            alert("Erro ao salvar. Verifique se o link da imagem é válido.");
+        }
+    }
 }
 
 function logout() {
     currentUser = null;
     localStorage.removeItem('anonbox_user');
     if (realTimeListener) realTimeListener();
-    document.getElementById('inp-pass').value = ""; // Limpa senha por segurança
+    document.getElementById('inp-pass').value = ""; 
     showScreen('login');
 }
 
-// --- MENSAGENS E BOTÃO DE RESPONDER ---
+// --- MENSAGENS E BOTÃO RESPONDER ---
 function listenToMessages() {
     const container = document.getElementById('messages-list');
     if (realTimeListener) realTimeListener();
@@ -135,7 +141,7 @@ function listenToMessages() {
         .onSnapshot((snapshot) => {
             container.innerHTML = "";
             if (snapshot.empty) {
-                container.innerHTML = '<p class="empty-state">Nenhuma mensagem ainda.</p>';
+                container.innerHTML = '<p class="empty-state">Sem mensagens.</p>';
                 return;
             }
             snapshot.forEach(doc => {
@@ -148,72 +154,59 @@ function createMessageCard(text, container) {
     const card = document.createElement('div');
     card.className = 'message-card';
     
-    // Texto da pergunta
     const textElem = document.createElement('div');
     textElem.className = 'msg-text';
     textElem.innerText = text;
     
-    // Botão de Responder (Chama a função mágica)
     const btn = document.createElement('button');
     btn.className = 'btn-reply';
     btn.innerHTML = '<span class="material-icons">photo_camera</span> Responder no Story';
-    btn.onclick = () => generateStoryImage(text, btn);
+    btn.onclick = () => generateStoryImage(text);
 
     card.appendChild(textElem);
     card.appendChild(btn);
     container.appendChild(card);
 }
 
-// --- FUNÇÃO MÁGICA: GERAR IMAGEM E COMPARTILHAR ---
-function generateStoryImage(text, btnElement) {
-    // 1. Preenche o template escondido com o texto da pergunta
+// --- COMPARTILHAMENTO (NATIVO MOBILE) ---
+function generateStoryImage(text) {
     const storyText = document.getElementById('story-text');
     storyText.innerText = text;
 
     const element = document.getElementById('story-capture');
-    const originalText = btnElement.innerHTML;
+    const btn = document.querySelector('.btn-reply');
+    const originalText = btn.innerHTML;
     
-    // Feedback visual
-    btnElement.innerHTML = "Gerando...";
-    btnElement.disabled = true;
+    btn.innerHTML = "Gerando...";
+    btn.disabled = true;
 
-    // 2. Usa html2canvas para tirar o print
-    html2canvas(element, {
-        scale: 2, // Qualidade 2x (HD)
-        useCORS: true, // Permite carregar fontes externas
-        backgroundColor: null
-    }).then(canvas => {
-        // Transforma o 'print' em um arquivo de imagem (Blob)
+    html2canvas(element, { scale: 2, useCORS: true, backgroundColor: null }).then(canvas => {
         canvas.toBlob(blob => {
-            const file = new File([blob], "story_anonimo.png", { type: "image/png" });
+            const file = new File([blob], "pergunta.png", { type: "image/png" });
 
-            // 3. Tenta usar o Compartilhamento Nativo do Celular (Web Share API)
+            // Tenta abrir o Menu de Compartilhamento Nativo (iPhone/Android)
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 navigator.share({
                     files: [file],
-                    title: 'Responder no Instagram',
-                    text: 'Recebi essa pergunta no Anon.io!'
-                })
-                .then(() => console.log('Compartilhado!'))
-                .catch((error) => console.log('Erro ao compartilhar (ou cancelado)', error));
+                    title: 'Responder Anon.io',
+                    text: 'Mande a sua também!'
+                }).catch(() => console.log('Compartilhamento fechado'));
             } else {
-                // 4. FALLBACK: Se for PC ou celular antigo, faz o download normal
+                // Fallback para PC
                 const link = document.createElement('a');
                 link.download = `story_${currentUser.username}.png`;
                 link.href = canvas.toDataURL("image/png");
                 link.click();
-                alert("Imagem salva na galeria! Abra o Instagram e poste no Story.");
+                alert("Imagem salva! Agora poste no Instagram.");
             }
-
-            // Restaura o botão
-            btnElement.innerHTML = originalText;
-            btnElement.disabled = false;
+            btn.innerHTML = originalText;
+            btn.disabled = false;
         }, 'image/png');
     }).catch(err => {
         console.error(err);
-        alert("Erro ao gerar imagem. Tente novamente.");
-        btnElement.innerHTML = originalText;
-        btnElement.disabled = false;
+        alert("Erro ao gerar imagem.");
+        btn.innerHTML = originalText;
+        btn.disabled = false;
     });
 }
 
@@ -221,20 +214,23 @@ function copyLink() {
     const copyText = document.getElementById("my-link");
     copyText.select();
     document.execCommand("copy");
-    alert("Link copiado! Coloque no sticker do Instagram.");
+    alert("Copiado!");
 }
 
-// --- MODO VISITANTE (PÚBLICO) ---
+// --- VISITANTE ---
 function simulateVisitorView() {
     const username = currentUser.username;
-    // Usa avatar padrão de letra
-    const avatarUrl = `https://ui-avatars.com/api/?name=${username}&background=random&color=fff&bold=true&size=200`;
+    const avatarUrl = currentUser.avatar;
     loadPublicProfile(username, avatarUrl);
 }
 
 function loadPublicProfile(username, avatar) {
     document.getElementById('public-header').innerText = `Envie para @${username}`;
-    document.getElementById('public-avatar').src = avatar;
+    const img = document.getElementById('public-avatar');
+    img.src = avatar;
+    img.onerror = function() {
+        this.src = `https://ui-avatars.com/api/?name=${username}&background=random&color=fff&bold=true&size=200`;
+    };
     document.getElementById('public-screen').dataset.toUser = username;
     document.getElementById('question-input').value = "";
     showScreen('public');
@@ -244,11 +240,10 @@ function sendQuestion() {
     const text = document.getElementById('question-input').value;
     const toUser = document.getElementById('public-screen').dataset.toUser;
     
-    if (!text.trim()) return alert("Escreva algo antes de enviar!");
+    if (!text.trim()) return alert("Escreva algo!");
 
     const btn = document.querySelector('.btn-send');
-    btn.disabled = true; 
-    btn.innerText = "Enviando...";
+    btn.disabled = true; btn.innerText = "...";
 
     db.collection("messages").add({
         to: toUser,
@@ -256,22 +251,11 @@ function sendQuestion() {
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
     })
     .then(() => {
-        alert("Enviado com sucesso! 🚀");
+        alert("Enviado!");
         document.getElementById('question-input').value = "";
-        
-        // Se for o dono testando, volta pro painel
-        if (currentUser && currentUser.username === toUser) {
-            showScreen('dashboard');
-        }
+        if (currentUser && currentUser.username === toUser) showScreen('dashboard');
     })
-    .catch((err) => {
-        console.error(err);
-        alert("Erro ao enviar.");
-    })
-    .finally(() => { 
-        btn.disabled = false; 
-        btn.innerText = "Enviar 🚀"; 
-    });
+    .finally(() => { btn.disabled = false; btn.innerText = "Enviar 🚀"; });
 }
 
 function rollDice() {
@@ -285,22 +269,21 @@ function goToHome() {
     showScreen('login');
 }
 
-// --- INICIALIZAÇÃO DO SITE ---
+// --- START ---
 window.onload = function() {
     const urlParams = new URLSearchParams(window.location.search);
     const userParam = urlParams.get('u');
     
     if (userParam) {
-        // MODO VISITANTE (Alguém clicou no link)
-        const avatarUrl = `https://ui-avatars.com/api/?name=${userParam}&background=random&color=fff&bold=true&size=200`;
-        loadPublicProfile(userParam, avatarUrl);
+        // Busca dados do usuário (foto) se for visitante
+        db.collection('users').doc(userParam).get().then(doc => {
+            let avatar = `https://ui-avatars.com/api/?name=${userParam}&background=random&color=fff&bold=true&size=200`;
+            if(doc.exists && doc.data().avatar) avatar = doc.data().avatar;
+            loadPublicProfile(userParam, avatar);
+        });
     } else {
-        // MODO DONO (Verifica se já estava logado)
         const saved = localStorage.getItem('anonbox_user');
-        if (saved) {
-            loginUser(JSON.parse(saved));
-        } else {
-            showScreen('login');
-        }
+        if (saved) loginUser(JSON.parse(saved));
+        else showScreen('login');
     }
 };
